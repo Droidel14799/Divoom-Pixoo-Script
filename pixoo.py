@@ -203,7 +203,6 @@ class Pixoo(object):
       chunk = [total_size&0xff, (total_size>>8)&0xff, i]
       self.send(0x49, chunk+frames[i*200:(i+1)*200])
 
-
   def draw_pic(self, filepath):
     """
     Draw encoded picture.
@@ -216,107 +215,18 @@ class Pixoo(object):
     self.send(0x44, prefix+frame)
 
 
-class PixooMax(Pixoo):
-  """
-  PixooMax class, derives from Pixoo but does not support animation yet.
-  """
-  
-  def __init__(self, mac_address):
-    super().__init__(mac_address)
-
-  def draw_pic(self, filepath):
-    """
-    Draw encoded picture.
-    """
-    nb_colors, palette, pixel_data = self.encode_image(filepath)
-    frame_size = 8 + len(pixel_data) + len(palette)
-    frame_header = [0xAA, frame_size&0xff, (frame_size>>8)&0xff, 0, 0, 3, nb_colors&0xff, (nb_colors>>8)&0xff]
-    frame = frame_header + palette + pixel_data
-    prefix = [0x0, 0x0A,0x0A,0x04]
-    self.send(0x44, prefix+frame)
-
-  def draw_gif(self, filepath, speed=100):
-    raise 'NotYetImplemented'
-
-  def draw_anim(self, filepaths, speed=100):
-    raise 'NotYetImplemented'
-
-  def encode_image(self, filepath):
-    img = Image.open(filepath)
-    img = img.convert(mode="P", palette=Image.ADAPTIVE, colors=256).convert(mode="RGB")
-    return self.encode_raw_image(img)
-
-  def encode_raw_image(self, img):
-    """
-    Encode a 32x32 image.
-    """
-    # ensure image is 32x32
-    w,h = img.size
-    if w == h:
-      # resize if image is too big
-      if w > 32:
-        img = img.resize((32,32))
-
-      # create palette and pixel array
-      pixels = []
-      palette = []
-      for y in range(32):
-        for x in range(32):
-          pix = img.getpixel((x,y))
-          
-          if len(pix) == 4:
-            r,g,b,a = pix
-          elif len(pix) == 3:
-            r,g,b = pix
-          if (r,g,b) not in palette:
-            palette.append((r,g,b))
-            idx = len(palette)-1
-          else:
-            idx = palette.index((r,g,b))
-          pixels.append(idx)
-
-      # encode pixels
-      bitwidth = ceil(log10(len(palette))/log10(2))
-      nbytes = ceil((256*bitwidth)/8.)
-      encoded_pixels = [0]*nbytes
-
-      encoded_pixels = []
-      encoded_byte = ''
-
-      # Create our pixels bitstream
-      for i in pixels:
-        encoded_byte = bin(i)[2:].rjust(bitwidth, '0') + encoded_byte
-      
-      # Encode pixel data
-      while len(encoded_byte) >= 8:
-        encoded_pixels.append(encoded_byte[-8:])
-        encoded_byte = encoded_byte[:-8]
-
-      # If some bits left, pack and encode
-      padding = 8 - len(encoded_byte)
-      encoded_pixels.append(encoded_byte.rjust(bitwidth, '0'))
-
-      # Convert into array of 8-bit values
-      encoded_data = [int(c, 2) for c in encoded_pixels]
-      encoded_palette = []
-      for r,g,b in palette:
-        encoded_palette += [r,g,b]
-      return (len(palette), encoded_palette, encoded_data)
-    else:
-      print('[!] Image must be square.')
-
 if __name__ == '__main__':
   if len(sys.argv) >= 3:
     pixoo_baddr = sys.argv[1]
-    img_path = sys.argv[2]
+    anim_path = sys.argv[2]
 
-    pixoo = PixooMax(pixoo_baddr)
+    pixoo = Pixoo(pixoo_baddr)
     pixoo.connect()
 
     # mandatory to wait at least 1 second
     sleep(1)
 
     # draw image
-    pixoo.draw_pic(img_path)
+    pixoo.draw_anim(anim_path)
   else:
     print('Usage: %s <Pixoo BT address> <image path>' % sys.argv[0])
